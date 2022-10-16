@@ -30,10 +30,13 @@ class vnitrniStavDeska{
   bool prvni_zavolani_kontroly_stavu = true;
   bool prvni_zavolani_kontrola_priority = true;
   bool blocker = false;
+  bool stav_zmenen = false;
+
 
   
   unsigned long referencni_cas = 0;
   unsigned long referencni_cas_priorita = 0;
+  unsigned long referencni_cas_bez_gnd= 0;
 
   private:
     void reset_promennych(){
@@ -43,6 +46,11 @@ class vnitrniStavDeska{
       stav_vstup_povoleni = digitalRead(VSTUP_POVOLENI);
       stav_vstup_deska = digitalRead(VSTUP_DESKA);
       stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
+      Serial.println(stav_vstup_deska );
+      Serial.println(stav_priorita_vstup_deska );
+      digitalWrite(VYSTUP_POVOLENI, HIGH);
+      digitalWrite(VYSTUP_DESKA_NA_TLACITKO, HIGH);
+      digitalWrite(VYSTUP_DESKA_NA_PRIORITU, stav_priorita_vstup_deska);
     }
  
   public:
@@ -64,30 +72,35 @@ class vnitrniStavDeska{
       prvni_zavolani_kontroly_stavu = true;
       prvni_zavolani_kontrola_priority = true;
       blocker = false;
+      digitalWrite(VYSTUP_POVOLENI, HIGH);
+      digitalWrite(VYSTUP_DESKA_NA_TLACITKO, HIGH);
+      digitalWrite(VYSTUP_DESKA_NA_PRIORITU, stav_priorita_vstup_deska);
       Serial.println("Prvni setup");
     }
     
     void start_kontrola_stavu(int cas_ted){
       // first read all inputs
       stav_vstup_povoleni = digitalRead(VSTUP_POVOLENI);
-     
+      stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
       
       // Pokud prijde povoleni a je na GND a zajima me to jenom jednou
-      if(stav_vstup_povoleni == LOW and blocker == false){
+      if(stav_vstup_povoleni == 0 and blocker == false){
         Serial.println("Prisla GND na povoleni, blocker false");
         if (prvni_zavolani_kontroly_stavu == true){
           referencni_cas = cas_ted;
           prvni_zavolani_kontroly_stavu = false;
         }
         // Po 5 sekundach zavolej funkci, ktera zkontroluje vsechny stavy ze jsou ok, jinak vysli impuls na povoleni, aby se vyplo
+        
         if ((cas_ted - referencni_cas) >= DOBA_CEKANI_NA_POVOLENI){
           Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
           Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
           Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
           
-           if (cas_ted - referencni_cas < DOBA_CEKANI_NA_POVOLENI+200){
+          if (cas_ted - referencni_cas < DOBA_CEKANI_NA_POVOLENI+200){
             digitalWrite(VYSTUP_POVOLENI, LOW);
-            Serial.println("Zapisuju LOW na povoleni");  
+            Serial.println("Zapisuju LOW na povoleni"); 
+            
           }
           else{
             digitalWrite(VYSTUP_POVOLENI, HIGH);
@@ -95,25 +108,40 @@ class vnitrniStavDeska{
             Serial.println("Zapisuju HIGH na povoleni");  
           }
           
+          }
         }
+
         if (stav_vstup_deska != digitalRead(VSTUP_DESKA)){
         // mame 5 sekund na to, aby nastala zmena
         zkontroluj_stav_od_povoleni(cas_ted);
         }
-      }
+
       //pokud gnd neni a stejne zmackneme ze chceme menit stav
-      else{
-        if (stav_vstup_deska != digitalRead(VSTUP_DESKA)){
+      if(stav_vstup_povoleni == 1){
+        if (stav_vstup_deska != digitalRead(VSTUP_DESKA) and blocker == false){
           Serial.println("Prisel pozadavek menit stav desky bez POVOLENI");
           stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
-          digitalWrite(VYSTUP_DESKA_NA_TLACITKO, 0);
+          referencni_cas_bez_gnd = cas_ted;
           blocker = true;
         }
-        //jakmile precteme stejnou hodnotu na vstupu jako je stav priority tak nulujeme impuls
-        else{
-          Serial.println("Chci resetovat stav desky");
-          digitalWrite(VYSTUP_DESKA_NA_TLACITKO, 1);
-          reset_promennych();
+        else if(stav_priorita_vstup_deska != stav_vstup_deska and blocker == false){
+          stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
+          referencni_cas_bez_gnd = cas_ted;
+          Serial.println("Neshoduji se");
+          blocker = true;
+        }
+        if(blocker == true){
+          Serial.println(cas_ted - referencni_cas_bez_gnd);
+          if (cas_ted - referencni_cas_bez_gnd <= 300){
+            digitalWrite(VYSTUP_DESKA_NA_TLACITKO, 0);
+            digitalWrite(VYSTUP_DESKA_NA_PRIORITU, stav_priorita_vstup_deska);
+          }
+          else{
+            Serial.println("Chci resetovat stav desky");
+            digitalWrite(VYSTUP_DESKA_NA_TLACITKO, 1);
+            reset_promennych();
+          }
+          
         }
 
       }
@@ -153,19 +181,19 @@ class vnitrniStavDeska{
                 referencni_cas_priorita = cas_ted;
             }
             else if(cas_ted - referencni_cas_priorita >= 100){
-              digitalWrite(VYSTUP_DESKA_NA_TLACITKO, !stav_priorita_vstup_deska); 
+              digitalWrite(VYSTUP_DESKA_NA_TLACITKO, !stav_priorita_vstup_deska);
             }
           }
           else{
             Serial.println("Sedi vystup s prioritou");
-            // Muze dojit k resetu promennych, vsechno bylo spravne nastaveno 
-            reset_promennych();
+            // Muze dojit k resetu promennych, vsechno bylo spravne nastaveno
+            Serial.println(stav_priorita_vstup_deska);
+            stav_vstup_deska = digitalRead(VSTUP_DESKA);
+            digitalWrite(VYSTUP_DESKA_NA_PRIORITU, stav_vstup_deska);
+            
           }
     }
- 
-
-
-  
+   
 };
 
 vnitrniStavDeska *pole_desek[10];
@@ -184,11 +212,8 @@ void setup() {
 }
 
 void loop() {
-  delay(500);
   unsigned long cas_ted = millis();
   for(int i = 0; i < POCET_DESEK;i++){
     pole_desek[i] -> start_kontrola_stavu(cas_ted);
   }
-
-
 }
