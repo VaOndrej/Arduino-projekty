@@ -30,13 +30,12 @@ class vnitrniStavDeska{
   bool prvni_zavolani_kontroly_stavu = true;
   bool prvni_zavolani_kontrola_priority = true;
   bool blocker = false;
-  bool stav_zmenen = false;
-
 
   
   unsigned long referencni_cas = 0;
   unsigned long referencni_cas_priorita = 0;
   unsigned long referencni_cas_bez_gnd= 0;
+
 
   private:
     void reset_promennych(){
@@ -46,6 +45,7 @@ class vnitrniStavDeska{
       stav_vstup_povoleni = digitalRead(VSTUP_POVOLENI);
       stav_vstup_deska = digitalRead(VSTUP_DESKA);
       stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
+      
       Serial.println(stav_vstup_deska );
       Serial.println(stav_priorita_vstup_deska );
       digitalWrite(VYSTUP_POVOLENI, HIGH);
@@ -82,33 +82,15 @@ class vnitrniStavDeska{
       // first read all inputs
       stav_vstup_povoleni = digitalRead(VSTUP_POVOLENI);
       stav_priorita_vstup_deska = digitalRead(PRIORITA_VSTUP_DESKA);
+
       
       // Pokud prijde povoleni a je na GND a zajima me to jenom jednou
       if(stav_vstup_povoleni == 0 and blocker == false){
-        Serial.println("Prisla GND na povoleni, blocker false");
+        //Serial.println("Prisla GND na povoleni, blocker false");
         if (prvni_zavolani_kontroly_stavu == true){
           referencni_cas = cas_ted;
           prvni_zavolani_kontroly_stavu = false;
         }
-        // Po 5 sekundach zavolej funkci, ktera zkontroluje vsechny stavy ze jsou ok, jinak vysli impuls na povoleni, aby se vyplo
-        
-        if ((cas_ted - referencni_cas) >= DOBA_CEKANI_NA_POVOLENI){
-          Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
-          Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
-          Serial.println("Uběhlo 5 sekund a nebyla zmena na pinech");
-          
-          if (cas_ted - referencni_cas < DOBA_CEKANI_NA_POVOLENI+200){
-            digitalWrite(VYSTUP_POVOLENI, LOW);
-            Serial.println("Zapisuju LOW na povoleni"); 
-            
-          }
-          else{
-            digitalWrite(VYSTUP_POVOLENI, HIGH);
-            reset_promennych();
-            Serial.println("Zapisuju HIGH na povoleni");  
-          }
-          
-          }
         }
 
         if (stav_vstup_deska != digitalRead(VSTUP_DESKA)){
@@ -185,12 +167,11 @@ class vnitrniStavDeska{
             }
           }
           else{
-            Serial.println("Sedi vystup s prioritou");
+            Serial.println("Sedi vystup s prioritou, vypinam povoleni");
             // Muze dojit k resetu promennych, vsechno bylo spravne nastaveno
             Serial.println(stav_priorita_vstup_deska);
             stav_vstup_deska = digitalRead(VSTUP_DESKA);
             digitalWrite(VYSTUP_DESKA_NA_PRIORITU, stav_vstup_deska);
-            
           }
     }
    
