@@ -1,6 +1,3 @@
-#include <arduino-timer.h>
-
-
 //Pocet desek
 int POCET_DESEK = 1;
 
@@ -10,7 +7,7 @@ int DOBA_CEKANI_NA_PRIORITU = 1000;
 
 
 // Globalni vstupy / vystupy
-int VSTUP_POVOLENI = 2; //Zaciname az s pinem 2, 0a1 jsou na komunikaci s USB
+int VSTUP_POVOLENI = 2; //Zaciname az s pinem 2, 0 a 1 jsou na komunikaci s USB
 int VYSTUP_POVOLENI = 3; 
 
 
@@ -24,7 +21,7 @@ int VYSTUP_DESKA_1_3 = 6;
 template<typename vnitrniStavDeska>
 // Definice funkce, kterou zavolat, kdyz nastane interrupt
 int nastalaZmenaNaVstupu(vnitrniStavDeska *p){
-  p->priselInterrupt();
+  p->priselInterruptNaVstup();
   return 0;
 }
 
@@ -36,11 +33,6 @@ int prisloPovoleniInterrupt(vnitrniStavDeska *ukazatel_na_vsechny_desky){
   return 0;
 }
 
-Timer<10> timer;
-
-void impulzNaPin(int pin, int hodnotaPulzu){
-  digitalWrite(pin, hodnotaPulzu);
-}
 
 
 class vnitrniStavDeska{
@@ -49,23 +41,27 @@ class vnitrniStavDeska{
   int VYSTUP_2 = 0;
   int VYSTUP_3 = 0;
 
+  unsigned long referencni_cas = 0;
+  unsigned long cas_ted = 0;
 
-
+  int interrupt_zmena_stav = -1;
 
   public:
     // Ukazatel sam na sebe
     vnitrniStavDeska *p;
-
-    // aktivniStav definuje aktualni stav naseho systemu (dle obrazku 0 az 6)
-    int aktivniStav = 0;
+    
+    bool reagujNaZmenuVystupu = true;
+    
+    
+    // aktivniStav definuje aktualni stav naseho systemu (dle obrazku 0 az 6, v -1 zaciname)
+    int aktivniStav = -1;
     
     // Definice vsech funkci potrebnych k simulovani chovani celeho systemu
     void prisloPovoleni(){
         
         switch (aktivniStav){
         // Zakladni stav nic nedelej
-        case 0:
-          // Zacni pocitat 5 sekund
+        case 0:  
           aktivniStav = 4;
           break;
   
@@ -74,20 +70,26 @@ class vnitrniStavDeska{
    
 
     void priselInterruptNaVstup(){
+
         
         switch (aktivniStav){
         // Zakladni stav nic nedelej
         case 0:
+          // TODO: mozna fix, pokud nebude fungovat
+          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 1;
           break;
   
-        // Zapis na vystup 3
         case 2:
+          // TODO: mozna fix, pokud nebude fungovat
+          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 3;
           break;
           
         // Cekame na zmenu na interrupt
         case 4:
+          // TODO: mozna fix, pokud nebude fungovat
+          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 5;
           break;
       }
@@ -95,7 +97,7 @@ class vnitrniStavDeska{
 
     
     void zkontrolujStav(){
-
+    cas_ted = millis();
      switch (aktivniStav){
       // Zakladni stav nic nedelej
       case 0:
@@ -103,8 +105,8 @@ class vnitrniStavDeska{
 
       // Zapis na vystup 3
       case 1:
-        zapisNaVystupTlacitkaGndImpulz();
-        aktivniStav = 2;
+        zapisNaPin(0, VYSTUP_3, 1, 0);
+        zapisNaPin(150, VYSTUP_3, 2, 1);
         break;
         
       // Cekame na zmenu na interrupt
@@ -118,18 +120,30 @@ class vnitrniStavDeska{
 
       // Prijde povoleni interruptem
       case 4:
+        // Za 5 sekund posli impulz
+        zapisNaPin(DOBA_CEKANI_NA_POVOLENI, VYSTUP_POVOLENI, 6, 0);
         break;
         
       // Cekame na zmenu na interrupt
       case 5:
         // Zapsat data na vystup
-        aktivniStav = 6;
+        // Podle toho jaka zmena nastala tak zapsat na vystup
+        if (interrupt_zmena_stav == 0){
+          zapisNaPin(0, VYSTUP_1, 5, 1);
+          zapisNaPin(500, VYSTUP_1, 6, 0);
+        }
+        else if(interrupt_zmena_stav == 1){
+          zapisNaPin(0, VYSTUP_2, 5, 1);
+          zapisNaPin(500, VYSTUP_2, 6, 0);
+        }
+        
         break;
         
       // Cekame na zmenu na interrupt
       case 6:
         //Vyslat impulz na povoleni GND
-        aktivniStav = 0;
+        zapisNaPin(0, VYSTUP_POVOLENI, 6, 0);   
+        zapisNaPin(100, VYSTUP_POVOLENI, 0, 1);
         break;
      
      
@@ -137,21 +151,29 @@ class vnitrniStavDeska{
       
     }
 
-  void zapisNaVystupTlacitkaGndImpulz(){
-    timer.in(10, impulzNaPin, VYSTUP_3);
-    timer.in(250, impulzNaPin, VYSTUP_3);
+  void zapisNaPin(int doba_cekani, int pin, int aktivni_budouci_stav, int hodnota_na_vystup){
+    if(cas_ted - referencni_cas >= doba_cekani){
+      digitalWrite(pin, hodnota_na_vystup);
+      // TODO: mozny fix bude pridat sem delay
+      aktivniStav = aktivni_budouci_stav;
+      referencni_cas = cas_ted;
+    }
   }
    
     
     void first_setup(int vstup_deska_pin, int vystup_1 , int vystup_2, int vystup_3){
       pinMode(vstup_deska_pin, INPUT_PULLUP);  
-      pinMode(vystup_deska_na_prioritu_pin, OUTPUT);
-      pinMode(vystup_deska_na_tlacitko_pin, OUTPUT);
+      pinMode(vystup_1, OUTPUT);
+      pinMode(vystup_2, OUTPUT);
+      pinMode(vystup_3, OUTPUT);
+      
       attachInterrupt(digitalPinToInterrupt(VSTUP_DESKA_1), nastalaZmenaNaVstupu(p), CHANGE);
-      VSTUP_DESKA_PIN = vstup_deska_pin
-      VYSTUP_1 = vystup_1
-      VYSTUP_2 = vystup_2
-      VYSTUP_3 = vystup_3
+      VSTUP_DESKA = vstup_deska_pin;
+      VYSTUP_1 = vystup_1;
+      VYSTUP_2 = vystup_2;
+      VYSTUP_3 = vystup_3;
+
+      aktivniStav = 0;
     }
     
 
@@ -182,7 +204,6 @@ void setup() {
 
 void loop() {
   for(int i = 0; i < POCET_DESEK;i++){
-    pole_desek[i] -> timer.tick();
     pole_desek[i]-> zkontrolujStav();
   }
 }
