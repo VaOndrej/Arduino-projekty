@@ -125,9 +125,6 @@ class vnitrniStavDeska{
         
       // Cekame na zmenu na interrupt
       case 5:
-        Serial.print(minulyAktivniStav);
-        Serial.print("Stav: " + minulyStavVstupu);
-        Serial.print( "Stav: " + digitalRead(VSTUP_DESKA));
         // Detekujeme vzestupnou hranu
         if (minulyStavVstupu == 0 and digitalRead(VSTUP_DESKA) == 1){
           if (minulyAktivniStav != aktivniStav){
