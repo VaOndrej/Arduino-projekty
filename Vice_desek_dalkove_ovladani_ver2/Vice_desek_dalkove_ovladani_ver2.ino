@@ -11,33 +11,16 @@ int VYSTUP_POVOLENI = 3;
 
 // Ukazka pro 1 desku
 int VSTUP_DESKA_1 = 4;
-int VYSTUP_DESKA_1_1 = 5;
-int VYSTUP_DESKA_1_2 = 6;
-int VYSTUP_DESKA_1_3 = 7;
-
-/*
-template<typename vnitrniStavDeska>
-// Definice funkce, kterou zavolat, kdyz nastane interrupt
-int nastalaZmenaNaVstupu(vnitrniStavDeska *p){
-  p->priselInterruptNaVstup();
-  return 0;
-}
-
-template<typename vnitrniStavDeska>
-int prisloPovoleniInterrupt(vnitrniStavDeska *ukazatel_na_vsechny_desky){
-  for(int i = 0; i < POCET_DESEK;i++){
-    ukazatel_na_vsechny_desky[i]-> prisloPovoleni();
-  }
-  return 0;
-}
-*/
+int VYSTUP_DESKA_1_1 = 5; // Vystup na rele 1
+int VYSTUP_DESKA_1_2 = 6; // Vystup na rele 2
+int VYSTUP_DESKA_1_3 = 7; // Vystup zpet na tlacitko
 
 
 class vnitrniStavDeska{
   int VSTUP_DESKA = 0; 
-  int VYSTUP_1 = 0;
-  int VYSTUP_2 = 0;
-  int VYSTUP_3 = 0;
+  int VYSTUP_1 = 0; 
+  int VYSTUP_2 = 0; 
+  int VYSTUP_3 = 0; 
 
   unsigned long referencni_cas = 0;
   unsigned long cas_ted = 0;
@@ -45,6 +28,9 @@ class vnitrniStavDeska{
   int interrupt_zmena_stav = -1;
   int minulyStavVstupu = -1;
   int stavPovoleni = -1;
+
+  bool sestupna_hrana = false;
+  bool vzestupna_hrana = false;
 
   public:
     // Ukazatel sam na sebe
@@ -88,6 +74,7 @@ class vnitrniStavDeska{
     
     void zkontrolujStav(){
     cas_ted = millis();
+    delay(10);
     Serial.println(aktivniStav);
     // Pokud bude povoleni na GND, vime ze prisel pozadavek
     stavPovoleni = digitalRead(VSTUP_POVOLENI);
@@ -103,6 +90,7 @@ class vnitrniStavDeska{
      switch (aktivniStav){
       // Zakladni stav nic nedelej
       case 0:
+        minulyAktivniStav = 0;
         break;
 
       // Zapis na vystup 3
@@ -137,24 +125,33 @@ class vnitrniStavDeska{
         
       // Cekame na zmenu na interrupt
       case 5:
-        Serial.print(minulyStavVstupu);
+        Serial.print(minulyAktivniStav);
+        Serial.print("Stav: " + minulyStavVstupu);
+        Serial.print( "Stav: " + digitalRead(VSTUP_DESKA));
         // Detekujeme vzestupnou hranu
-
-        // TODO fix na co kdy ma jit po restartu. Momentalne je to 1 a 1
         if (minulyStavVstupu == 0 and digitalRead(VSTUP_DESKA) == 1){
           if (minulyAktivniStav != aktivniStav){
             zapisNaPin(0, VYSTUP_1, 5, 1);
             referencni_cas = cas_ted;
-          }  
-          zapisNaPin(500, VYSTUP_1, 6, 0);
+          }
+          vzestupna_hrana = true;
+          
         }
         // Detekujeme sestupnou hranu
         else if(minulyStavVstupu == 1 and digitalRead(VSTUP_DESKA) == 0){
           if (minulyAktivniStav != aktivniStav){
             zapisNaPin(0, VYSTUP_2, 5, 1);
             referencni_cas = cas_ted;
-          } 
-          zapisNaPin(500, VYSTUP_2, 6, 0);
+          }
+          sestupna_hrana = true;
+        }
+        Serial.println(sestupna_hrana);
+        Serial.println(vzestupna_hrana);
+        if (sestupna_hrana == true){
+            zapisNaPin(500, VYSTUP_2, 6, 0);
+        }
+        else if (vzestupna_hrana == true){
+          zapisNaPin(500, VYSTUP_1, 6, 0);
         }
         minulyAktivniStav = 5;
         break;
@@ -163,6 +160,8 @@ class vnitrniStavDeska{
       case 6:
         if (minulyAktivniStav == 5){
           minulyStavVstupu = digitalRead(VSTUP_DESKA);
+          vzestupna_hrana = false;
+          sestupna_hrana = false;
         }
         //Vyslat impulz na povoleni GND
         if (minulyAktivniStav != aktivniStav){
@@ -170,6 +169,7 @@ class vnitrniStavDeska{
           referencni_cas = cas_ted;  
         }  
         zapisNaPin(100, VYSTUP_POVOLENI, 0, 1);
+
         minulyAktivniStav = 6;
         break;
      
@@ -203,6 +203,10 @@ class vnitrniStavDeska{
       pinMode(vystup_2, OUTPUT);
       pinMode(vystup_3, OUTPUT);
       
+      digitalWrite(vystup_1, LOW); // Pro relatka LOW
+      digitalWrite(vystup_2, LOW); // Pro relatka LOW
+      digitalWrite(vystup_3, HIGH); 
+
       VSTUP_DESKA = vstup_deska_pin;
       VYSTUP_1 = vystup_1;
       VYSTUP_2 = vystup_2;
@@ -230,7 +234,7 @@ void setup() {
   // Nastaveni vstupu pro POVOLENI -----------------------------------------------
   pinMode(VSTUP_POVOLENI, INPUT_PULLUP);
   pinMode(VYSTUP_POVOLENI, OUTPUT);
-  
+  digitalWrite(VYSTUP_POVOLENI, HIGH);
   // Tady jsou vsechny definice desek
   pinMode(VSTUP_DESKA_1, INPUT_PULLUP);
   pole_desek[0] = new vnitrniStavDeska();
