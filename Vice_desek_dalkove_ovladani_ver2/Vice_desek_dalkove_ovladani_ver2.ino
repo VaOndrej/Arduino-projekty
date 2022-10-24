@@ -3,21 +3,19 @@ int POCET_DESEK = 1;
 
 // Udava se v milisekundach
 int DOBA_CEKANI_NA_POVOLENI = 5000; 
-int DOBA_CEKANI_NA_PRIORITU = 1000; 
 
 
 // Globalni vstupy / vystupy
 int VSTUP_POVOLENI = 2; //Zaciname az s pinem 2, 0 a 1 jsou na komunikaci s USB
 int VYSTUP_POVOLENI = 3; 
 
-
 // Ukazka pro 1 desku
 int VSTUP_DESKA_1 = 4;
 int VYSTUP_DESKA_1_1 = 5;
 int VYSTUP_DESKA_1_2 = 6;
-int VYSTUP_DESKA_1_3 = 6;
+int VYSTUP_DESKA_1_3 = 7;
 
-
+/*
 template<typename vnitrniStavDeska>
 // Definice funkce, kterou zavolat, kdyz nastane interrupt
 int nastalaZmenaNaVstupu(vnitrniStavDeska *p){
@@ -32,7 +30,7 @@ int prisloPovoleniInterrupt(vnitrniStavDeska *ukazatel_na_vsechny_desky){
   }
   return 0;
 }
-
+*/
 
 
 class vnitrniStavDeska{
@@ -45,51 +43,43 @@ class vnitrniStavDeska{
   unsigned long cas_ted = 0;
 
   int interrupt_zmena_stav = -1;
+  int minulyStavVstupu = -1;
+  int stavPovoleni = -1;
 
   public:
     // Ukazatel sam na sebe
     vnitrniStavDeska *p;
     
-    bool reagujNaZmenuVystupu = true;
-    
-    
     // aktivniStav definuje aktualni stav naseho systemu (dle obrazku 0 az 6, v -1 zaciname)
     int aktivniStav = -1;
-    
+    int minulyAktivniStav = -1;
     // Definice vsech funkci potrebnych k simulovani chovani celeho systemu
     void prisloPovoleni(){
-        
         switch (aktivniStav){
-        // Zakladni stav nic nedelej
-        case 0:  
-          aktivniStav = 4;
-          break;
-  
-      }
+          // Prechod ze zakladniho stavu na cekani na dobu povoleni
+          case 0:  
+            Serial.print("Stav jde na 4");
+            aktivniStav = 4;
+            break;
+        }
+      
     }
    
 
-    void priselInterruptNaVstup(){
-
-        
+    void prislaZmenaNaVstup(){
+      Serial.println("Prisla zmena na vstup");
+        delay(100);
         switch (aktivniStav){
-        // Zakladni stav nic nedelej
         case 0:
-          // TODO: mozna fix, pokud nebude fungovat
-          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 1;
           break;
   
         case 2:
-          // TODO: mozna fix, pokud nebude fungovat
-          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 3;
           break;
           
         // Cekame na zmenu na interrupt
         case 4:
-          // TODO: mozna fix, pokud nebude fungovat
-          interrupt_zmena_stav = digitalRead(VSTUP_DESKA_1);
           aktivniStav = 5;
           break;
       }
@@ -98,6 +88,18 @@ class vnitrniStavDeska{
     
     void zkontrolujStav(){
     cas_ted = millis();
+    Serial.println(aktivniStav);
+    // Pokud bude povoleni na GND, vime ze prisel pozadavek
+    stavPovoleni = digitalRead(VSTUP_POVOLENI);
+    if (stavPovoleni == 0){
+      prisloPovoleni();
+    }
+
+    //Detekce zmeny na vstupu
+    if(minulyStavVstupu != digitalRead(VSTUP_DESKA)){
+        prislaZmenaNaVstup();
+    }
+
      switch (aktivniStav){
       // Zakladni stav nic nedelej
       case 0:
@@ -105,45 +107,70 @@ class vnitrniStavDeska{
 
       // Zapis na vystup 3
       case 1:
-        zapisNaPin(0, VYSTUP_3, 1, 0);
+        if (minulyAktivniStav != aktivniStav){
+          zapisNaPin(0, VYSTUP_3, 1, 0);
+        }
         zapisNaPin(150, VYSTUP_3, 2, 1);
+        minulyAktivniStav = 1;
         break;
         
       // Cekame na zmenu na interrupt
       case 2:
+        minulyAktivniStav = 2;
         break;
 
       // Cekame na zmenu na interrupt
       case 3:
         aktivniStav = 0;
+        minulyAktivniStav = 3;
         break;
 
       // Prijde povoleni interruptem
       case 4:
         // Za 5 sekund posli impulz
+        if (minulyAktivniStav != aktivniStav){
+          referencni_cas = cas_ted;
+        }
         zapisNaPin(DOBA_CEKANI_NA_POVOLENI, VYSTUP_POVOLENI, 6, 0);
+        minulyAktivniStav = 4;
         break;
         
       // Cekame na zmenu na interrupt
       case 5:
-        // Zapsat data na vystup
-        // Podle toho jaka zmena nastala tak zapsat na vystup
-        if (interrupt_zmena_stav == 0){
-          zapisNaPin(0, VYSTUP_1, 5, 1);
+        Serial.print(minulyStavVstupu);
+        // Detekujeme vzestupnou hranu
+
+        // TODO fix na co kdy ma jit po restartu. Momentalne je to 1 a 1
+        if (minulyStavVstupu == 0 and digitalRead(VSTUP_DESKA) == 1){
+          if (minulyAktivniStav != aktivniStav){
+            zapisNaPin(0, VYSTUP_1, 5, 1);
+            referencni_cas = cas_ted;
+          }  
           zapisNaPin(500, VYSTUP_1, 6, 0);
         }
-        else if(interrupt_zmena_stav == 1){
-          zapisNaPin(0, VYSTUP_2, 5, 1);
+        // Detekujeme sestupnou hranu
+        else if(minulyStavVstupu == 1 and digitalRead(VSTUP_DESKA) == 0){
+          if (minulyAktivniStav != aktivniStav){
+            zapisNaPin(0, VYSTUP_2, 5, 1);
+            referencni_cas = cas_ted;
+          } 
           zapisNaPin(500, VYSTUP_2, 6, 0);
         }
-        
+        minulyAktivniStav = 5;
         break;
         
       // Cekame na zmenu na interrupt
       case 6:
+        if (minulyAktivniStav == 5){
+          minulyStavVstupu = digitalRead(VSTUP_DESKA);
+        }
         //Vyslat impulz na povoleni GND
-        zapisNaPin(0, VYSTUP_POVOLENI, 6, 0);   
+        if (minulyAktivniStav != aktivniStav){
+          zapisNaPin(0, VYSTUP_POVOLENI, 6, 0);
+          referencni_cas = cas_ted;  
+        }  
         zapisNaPin(100, VYSTUP_POVOLENI, 0, 1);
+        minulyAktivniStav = 6;
         break;
      
      
@@ -154,6 +181,14 @@ class vnitrniStavDeska{
   void zapisNaPin(int doba_cekani, int pin, int aktivni_budouci_stav, int hodnota_na_vystup){
     if(cas_ted - referencni_cas >= doba_cekani){
       digitalWrite(pin, hodnota_na_vystup);
+      Serial.print("Pin:");
+      Serial.print(pin);
+      Serial.print(" Doba cekani: ");
+      Serial.print(doba_cekani);
+      Serial.print(" Aktualni stav: ");
+      Serial.print(aktivniStav);
+      Serial.print(" Budouci stav: ");
+      Serial.print(aktivni_budouci_stav);
       // TODO: mozny fix bude pridat sem delay
       aktivniStav = aktivni_budouci_stav;
       referencni_cas = cas_ted;
@@ -162,18 +197,23 @@ class vnitrniStavDeska{
    
     
     void first_setup(int vstup_deska_pin, int vystup_1 , int vystup_2, int vystup_3){
-      pinMode(vstup_deska_pin, INPUT_PULLUP);  
+      //Serial.println("Prvni setup");
+      pinMode(vstup_deska_pin, INPUT_PULLUP);
       pinMode(vystup_1, OUTPUT);
       pinMode(vystup_2, OUTPUT);
       pinMode(vystup_3, OUTPUT);
       
-      attachInterrupt(digitalPinToInterrupt(VSTUP_DESKA_1), nastalaZmenaNaVstupu(p), CHANGE);
       VSTUP_DESKA = vstup_deska_pin;
       VYSTUP_1 = vystup_1;
       VYSTUP_2 = vystup_2;
       VYSTUP_3 = vystup_3;
 
+      minulyStavVstupu = digitalRead(VSTUP_DESKA);
+      stavPovoleni = digitalRead(VSTUP_POVOLENI);
+
       aktivniStav = 0;
+
+
     }
     
 
@@ -181,24 +221,21 @@ class vnitrniStavDeska{
 };
 
 
-
-
-
 // Tohle se musi taky zmenit cislo uvnitr [] musi odpovidat poctu desek
 vnitrniStavDeska *pole_desek[1];
 
 
 void setup() {
-  Serial.begin(9600);
-  
+  Serial.begin(112500);
   // Nastaveni vstupu pro POVOLENI -----------------------------------------------
   pinMode(VSTUP_POVOLENI, INPUT_PULLUP);
   pinMode(VYSTUP_POVOLENI, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(VSTUP_POVOLENI), prisloPovoleniInterrupt(pole_desek), CHANGE);
   
   // Tady jsou vsechny definice desek
+  pinMode(VSTUP_DESKA_1, INPUT_PULLUP);
   pole_desek[0] = new vnitrniStavDeska();
   pole_desek[0] -> first_setup(VSTUP_DESKA_1, VYSTUP_DESKA_1_1, VYSTUP_DESKA_1_2, VYSTUP_DESKA_1_3);
+
 
 }
 
