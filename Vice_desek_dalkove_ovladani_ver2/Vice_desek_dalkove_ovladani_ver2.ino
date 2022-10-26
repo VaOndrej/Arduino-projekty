@@ -28,6 +28,7 @@ class vnitrniStavDeska{
   int interrupt_zmena_stav = -1;
   int minulyStavVstupu = -1;
   int stavPovoleni = -1;
+  int minulyStavPovoleni = -1;
 
   bool sestupna_hrana = false;
   bool vzestupna_hrana = false;
@@ -46,6 +47,10 @@ class vnitrniStavDeska{
           case 0:  
             Serial.print("Stav jde na 4");
             aktivniStav = 4;
+            break;
+          case 6:
+            Serial.print("Stav jde na 7 ale az za 150 ms - doba uplynuti log. 0");
+            aktivniStav = 7;
             break;
         }
       
@@ -78,8 +83,17 @@ class vnitrniStavDeska{
     Serial.println(aktivniStav);
     // Pokud bude povoleni na GND, vime ze prisel pozadavek
     stavPovoleni = digitalRead(VSTUP_POVOLENI);
-    if (stavPovoleni == 0){
+    
+    // Podminka kde testujeme, ze na povoleni prisla uz vzestupna hrana
+
+    if (stavPovoleni == 1){
+      minulyStavPovoleni = 1;
+    }
+
+    // Tady chceme detekovat pouze sestupnou hranu
+    if (stavPovoleni == 0 and minulyStavPovoleni != 0){
       prisloPovoleni();
+      minulyStavPovoleni = 0;
     }
 
     //Detekce zmeny na vstupu
@@ -165,12 +179,16 @@ class vnitrniStavDeska{
           zapisNaPin(0, VYSTUP_POVOLENI, 6, 0);
           referencni_cas = cas_ted;  
         }  
-        zapisNaPin(100, VYSTUP_POVOLENI, 0, 1);
+        zapisNaPin(100, VYSTUP_POVOLENI, 6, 1);
 
         minulyAktivniStav = 6;
         break;
      
-     
+      case 7:
+        Serial.println("Stav 7");
+        aktivniStav = 0;
+        minulyAktivniStav = 7;
+        break;
      }
       
     }
@@ -200,9 +218,9 @@ class vnitrniStavDeska{
       pinMode(vystup_2, OUTPUT);
       pinMode(vystup_3, OUTPUT);
       
-      digitalWrite(vystup_1, LOW); // Pro relatka LOW
-      digitalWrite(vystup_2, LOW); // Pro relatka LOW
-      digitalWrite(vystup_3, HIGH); 
+      //digitalWrite(vystup_1, LOW); // Pro relatka LOW
+      //digitalWrite(vystup_2, LOW); // Pro relatka LOW
+      //digitalWrite(vystup_3, HIGH); 
 
       VSTUP_DESKA = vstup_deska_pin;
       VYSTUP_1 = vystup_1;
@@ -231,7 +249,7 @@ void setup() {
   // Nastaveni vstupu pro POVOLENI -----------------------------------------------
   pinMode(VSTUP_POVOLENI, INPUT_PULLUP);
   pinMode(VYSTUP_POVOLENI, OUTPUT);
-  digitalWrite(VYSTUP_POVOLENI, HIGH);
+  //digitalWrite(VYSTUP_POVOLENI, HIGH);
   // Tady jsou vsechny definice desek
   pinMode(VSTUP_DESKA_1, INPUT_PULLUP);
   pole_desek[0] = new vnitrniStavDeska();
