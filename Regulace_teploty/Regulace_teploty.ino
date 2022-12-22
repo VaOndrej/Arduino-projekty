@@ -22,8 +22,9 @@ Adafruit_MAX31865 thermo = Adafruit_MAX31865(10, 11, 12, 13);
 //************************* NASTAVENI PINU A PRACE S TEPLOTOU **************************
 #define ZADANA_TEPLOTA_PIN                          A0
 #define TOPENI_PIN                                  7
+#define SIGNALIZACE_ZE_JE_TEPLOTA_SPRAVNA           8
 #define TEPLOTNI_KONSTANTA                          0.2932
-#define HYSTEREZNI_KONSTANTA_TEPLOTY                5
+#define HYSTEREZNI_KONSTANTA_TEPLOTY                8
 //**************************************************************************************
 
 
@@ -62,13 +63,19 @@ void zkontroluj_chybu_v_senzoru(){
 void ovladej_topeni(uint16_t aktualni_teplota, uint16_t zadana_teplota){
   
   //Mohou nastat 3 pripady
-  //Topeni se muze vypnout, protoze prectena teplota se pohybuje v rozmezi +-5 stupnu od teploty
-  if((zadana_teplota + HYSTEREZNI_KONSTANTA_TEPLOTY) > aktualni_teplota > (zadana_teplota - HYSTEREZNI_KONSTANTA_TEPLOTY)) {
+  //Topeni se muze vypnout, protoze prectena teplota se pohybuje v rozmezi +-HYSTEREZNI_KONSTANTA_TEPLOTY stupnu od teploty
+  if((zadana_teplota + HYSTEREZNI_KONSTANTA_TEPLOTY) > aktualni_teplota && aktualni_teplota > (zadana_teplota - HYSTEREZNI_KONSTANTA_TEPLOTY)) {
+    Serial.println("----TEPLOTA JE USTALENA, NETOPIM-----");
+    Serial.println("");
     digitalWrite(TOPENI_PIN, 0);
+    digitalWrite(SIGNALIZACE_ZE_JE_TEPLOTA_SPRAVNA, 1);
   }
   //Topeni zapnout
   else{
+    Serial.println("----TOPIM-----");
+    Serial.println("");
     digitalWrite(TOPENI_PIN, 1);
+    digitalWrite(SIGNALIZACE_ZE_JE_TEPLOTA_SPRAVNA, 0);
   }
   Serial.print("Pozadovana teplota: "); Serial.println(zadana_teplota);
   Serial.print("Aktualni teplota: "); Serial.println(aktualni_teplota);
@@ -112,14 +119,14 @@ void loop() {
   
   uint16_t odpor_pt = RREF*ratio; //Vypocet odporu
   uint16_t teplota_pt = thermo.temperature(RNOMINAL, RREF); // Vypocet teploty
-
+   
   //***************************** VYPIS NA SERIOVY MONITOR *********************
   //Serial.print("RTD value: "); Serial.println(rtd);
   //Serial.print("Odpor[ohm] = "); Serial.println(odpor_pt,8);
   //Serial.print("Teplota [Celsius] = "); Serial.println(teplota_pt);
 
   //***************************** KONTROLA CHYB V KOMUNIKACI SE SENZOREM *********************
-  zkontroluj_chybu_v_senzoru();
+   //zkontroluj_chybu_v_senzoru();
 
   //Pokud se v programu dostaneme az sem (a v konzoli neni error)
   //Mame aktualni teplotu a muzeme se zaridit podle toho s topenim
